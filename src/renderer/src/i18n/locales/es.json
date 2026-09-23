@@ -13045,6 +13045,15 @@
         "MermaidBlock": {
           "dcc132e691": "Error de diagrama:"
         },
+        "MermaidDiagramLightbox": {
+          "expand": "Expandir diagrama",
+          "title": "Diagrama",
+          "hint": "Desplaza para hacer zoom · Arrastra para mover",
+          "zoomIn": "Acercar",
+          "zoomOut": "Alejar",
+          "fit": "Ajustar a la pantalla",
+          "close": "Cerrar"
+        },
         "MonacoEditor": {
           "68cb83f4a7": "Agregar nota sobre el texto seleccionado",
           "fd68ae03b3": "Buscar en archivos",

@@ -2,6 +2,7 @@ import React, { useEffect, useId, useRef, useState } from 'react'
 import type mermaidNamespace from 'mermaid'
 import DOMPurify from 'dompurify'
 import { getMermaidConfig } from './mermaid-config'
+import MermaidDiagramLightbox from './MermaidDiagramLightbox'
 import { translate } from '@/i18n/i18n'
 
 type MermaidApi = typeof mermaidNamespace
@@ -55,6 +56,7 @@ export default function MermaidBlock({
   const id = useId().replace(/:/g, '_')
   const containerRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
+  const [expandedSvgMarkup, setExpandedSvgMarkup] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -71,19 +73,25 @@ export default function MermaidBlock({
         // and render(), which would make markdown preview fall back to the
         // broken foreignObject label path again.
         mermaid.initialize(getMermaidConfig(isDark, htmlLabels))
-        const { svg } = await mermaid.render(`mermaid-${id}`, content)
+        const renderId = `mermaid-${id}`
+        const { svg } = await mermaid.render(renderId, content)
         if (!cancelled && containerRef.current) {
           // Why: although mermaid uses DOMPurify internally, we add an explicit
           // sanitization pass as defense-in-depth against XSS in case upstream
           // behaviour changes or a mermaid version ships without sanitization.
-          containerRef.current.innerHTML = DOMPurify.sanitize(svg, {
+          const sanitizedSvg = DOMPurify.sanitize(svg, {
             USE_PROFILES: { svg: true }
           })
+          containerRef.current.innerHTML = sanitizedSvg
+          // Why: the expanded copy lives in the same document; its scoped <style>
+          // and marker url(#…) refs must not collide with the inline diagram's IDs.
+          setExpandedSvgMarkup(sanitizedSvg.replaceAll(renderId, `${renderId}-expanded`))
           setError(null)
         }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Invalid mermaid syntax')
+          setExpandedSvgMarkup(null)
           // Mermaid leaves an error element in the DOM on failure — clean it up.
           const errorEl = document.getElementById(`d${`mermaid-${id}`}`)
           errorEl?.remove()
@@ -112,5 +120,10 @@ export default function MermaidBlock({
     )
   }
 
-  return <div className="mermaid-block" ref={containerRef} />
+  return (
+    <div className="mermaid-block group/mermaid relative">
+      <div ref={containerRef} />
+      {expandedSvgMarkup && <MermaidDiagramLightbox svgMarkup={expandedSvgMarkup} />}
+    </div>
+  )
 }

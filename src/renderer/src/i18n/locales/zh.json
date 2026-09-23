@@ -13125,6 +13125,15 @@
         "MermaidBlock": {
           "dcc132e691": "图表错误："
         },
+        "MermaidDiagramLightbox": {
+          "expand": "展开图表",
+          "title": "图表",
+          "hint": "滚动以缩放 · 拖动以平移",
+          "zoomIn": "放大",
+          "zoomOut": "缩小",
+          "fit": "适应屏幕",
+          "close": "关闭"
+        },
         "MonacoEditor": {
           "68cb83f4a7": "在选定的文本上添加注释",
           "fd68ae03b3": "在文件中搜索",
