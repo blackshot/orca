@@ -41,6 +41,10 @@ export function fitDiagramTransform(content: DiagramSize, viewport: DiagramSize)
   }
 }
 
+export function isSameDiagramTransform(a: DiagramTransform, b: DiagramTransform): boolean {
+  return a.x === b.x && a.y === b.y && a.scale === b.scale
+}
+
 /** Zooms to `nextScale` while keeping the diagram point under `anchor` fixed on screen. */
 export function zoomDiagramAt(
   transform: DiagramTransform,

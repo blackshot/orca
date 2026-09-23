@@ -5,6 +5,7 @@ import {
   clampDiagramScale,
   diagramMinScale,
   fitDiagramTransform,
+  isSameDiagramTransform,
   wheelZoomFactor,
   zoomDiagramAt
 } from './mermaid-diagram-viewport'
@@ -71,6 +72,24 @@ describe('diagramMinScale', () => {
 
   it('keeps the default floor for diagrams that fit above it', () => {
     expect(diagramMinScale(0.6)).toBe(MIN_DIAGRAM_SCALE)
+  })
+})
+
+describe('isSameDiagramTransform', () => {
+  it('reports no change for a zoom that is already at the scale limit', () => {
+    const atMax = { x: 10, y: 20, scale: MAX_DIAGRAM_SCALE }
+    expect(isSameDiagramTransform(atMax, zoomDiagramAt(atMax, 100, { x: 50, y: 50 }))).toBe(true)
+  })
+
+  it('reports no change for a zero wheel delta and a change for a real zoom', () => {
+    const start = { x: 10, y: 20, scale: 1 }
+    const anchor = { x: 50, y: 50 }
+    expect(isSameDiagramTransform(start, zoomDiagramAt(start, wheelZoomFactor(0, 0), anchor))).toBe(
+      true
+    )
+    expect(
+      isSameDiagramTransform(start, zoomDiagramAt(start, wheelZoomFactor(-100, 0), anchor))
+    ).toBe(false)
   })
 })
 

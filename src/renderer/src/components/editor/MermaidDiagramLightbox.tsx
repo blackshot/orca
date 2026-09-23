@@ -16,6 +16,7 @@ import {
   MIN_DIAGRAM_SCALE,
   diagramMinScale,
   fitDiagramTransform,
+  isSameDiagramTransform,
   wheelZoomFactor,
   zoomDiagramAt,
   type DiagramSize,
@@ -134,6 +135,9 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramViewportProps): Rea
   // Why: auto-refit on resize only while the view is still the fitted one, so a
   // window resize never throws away the zoom/pan the user chose.
   const userAdjustedRef = useRef(false)
+  // Why: mirrors `transform` so rapid wheel events chain off the latest value and
+  // handlers can tell whether an input actually moved the view.
+  const transformRef = useRef<DiagramTransform | null>(null)
   const dragRef = useRef<DragState | null>(null)
   const [transform, setTransform] = useState<DiagramTransform | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -149,8 +153,28 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramViewportProps): Rea
     })
     minScaleRef.current = diagramMinScale(fitted.scale)
     userAdjustedRef.current = false
+    transformRef.current = fitted
     setTransform(fitted)
   }, [])
+
+  // Why: no-op inputs (horizontal wheel, zoom at a limit, click without movement)
+  // must not count as a user adjustment, or resize would stop refitting.
+  const applyUserTransform = useCallback(
+    (update: (current: DiagramTransform) => DiagramTransform) => {
+      const current = transformRef.current
+      if (!current) {
+        return
+      }
+      const next = update(current)
+      if (isSameDiagramTransform(current, next)) {
+        return
+      }
+      userAdjustedRef.current = true
+      transformRef.current = next
+      setTransform(next)
+    },
+    []
+  )
 
   useLayoutEffect(() => {
     const host = diagramRef.current
@@ -198,15 +222,13 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramViewportProps): Rea
       const rect = viewport.getBoundingClientRect()
       const anchor = { x: event.clientX - rect.left, y: event.clientY - rect.top }
       const factor = wheelZoomFactor(event.deltaY, event.deltaMode)
-      userAdjustedRef.current = true
-      setTransform(
-        (current) =>
-          current && zoomDiagramAt(current, current.scale * factor, anchor, minScaleRef.current)
+      applyUserTransform((current) =>
+        zoomDiagramAt(current, current.scale * factor, anchor, minScaleRef.current)
       )
     }
     viewport.addEventListener('wheel', onWheel, { passive: false })
     return () => viewport.removeEventListener('wheel', onWheel)
-  }, [])
+  }, [applyUserTransform])
 
   const zoomAroundCenter = (factor: number): void => {
     const viewport = viewportRef.current
@@ -214,10 +236,8 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramViewportProps): Rea
       return
     }
     const anchor = { x: viewport.clientWidth / 2, y: viewport.clientHeight / 2 }
-    userAdjustedRef.current = true
-    setTransform(
-      (current) =>
-        current && zoomDiagramAt(current, current.scale * factor, anchor, minScaleRef.current)
+    applyUserTransform((current) =>
+      zoomDiagramAt(current, current.scale * factor, anchor, minScaleRef.current)
     )
   }
 
@@ -241,7 +261,8 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramViewportProps): Rea
           data-dragging={dragging}
           className="absolute inset-0 cursor-grab touch-none overflow-hidden bg-background select-none data-[dragging=true]:cursor-grabbing"
           onPointerDown={(event) => {
-            if (event.button !== 0 || !transform) {
+            const current = transformRef.current
+            if (event.button !== 0 || !current) {
               return
             }
             event.currentTarget.setPointerCapture(event.pointerId)
@@ -249,8 +270,8 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramViewportProps): Rea
               pointerId: event.pointerId,
               startX: event.clientX,
               startY: event.clientY,
-              originX: transform.x,
-              originY: transform.y
+              originX: current.x,
+              originY: current.y
             }
             setDragging(true)
           }}
@@ -259,15 +280,11 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramViewportProps): Rea
             if (!drag || drag.pointerId !== event.pointerId) {
               return
             }
-            userAdjustedRef.current = true
-            setTransform(
-              (current) =>
-                current && {
-                  ...current,
-                  x: drag.originX + event.clientX - drag.startX,
-                  y: drag.originY + event.clientY - drag.startY
-                }
-            )
+            applyUserTransform((current) => ({
+              ...current,
+              x: drag.originX + event.clientX - drag.startX,
+              y: drag.originY + event.clientY - drag.startY
+            }))
           }}
           onPointerUp={endDrag}
           onPointerCancel={endDrag}
