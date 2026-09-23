@@ -23,7 +23,11 @@ import {
 } from './mermaid-diagram-viewport'
 
 type MermaidDiagramLightboxProps = {
-  /** Already DOMPurify-sanitized SVG markup produced by MermaidBlock. */
+  /** Reads the rendered diagram's sanitized SVG markup; called only when the viewer opens. */
+  getSvgMarkup: () => string | null
+}
+
+type MermaidDiagramViewportProps = {
   svgMarkup: string
 }
 
@@ -40,15 +44,30 @@ type DragState = {
  * wheel zoom and drag pan. The dialog primitive owns Escape and focus restore.
  */
 export default function MermaidDiagramLightbox({
-  svgMarkup
+  getSvgMarkup
 }: MermaidDiagramLightboxProps): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  // Why: captured on open and dropped after close so idle diagrams hold no second SVG copy.
+  const [svgMarkup, setSvgMarkup] = useState<string | null>(null)
   const expandLabel = translate(
     'auto.components.editor.MermaidDiagramLightbox.expand',
     'Expand diagram'
   )
 
   return (
-    <Dialog>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) {
+          const markup = getSvgMarkup()
+          if (!markup) {
+            return
+          }
+          setSvgMarkup(markup)
+        }
+        setOpen(nextOpen)
+      }}
+    >
       {/* Why: the wrapper owns hover reveal so the Button keeps its own variant styling. */}
       <div className="absolute top-2 right-2 opacity-0 transition-opacity group-hover/mermaid:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100">
         <Tooltip>
@@ -86,11 +105,13 @@ export default function MermaidDiagramLightbox({
             event.currentTarget.focus()
           }
         }}
+        // Runs after the exit animation, so the diagram stays visible while fading out.
+        onCloseAutoFocus={() => setSvgMarkup(null)}
         // Why: React bubbles portal events through the component tree, so pans and
         // clicks here would otherwise reach the markdown host's click handlers.
         onClick={(event) => event.stopPropagation()}
       >
-        <MermaidDiagramViewport svgMarkup={svgMarkup} />
+        {svgMarkup && <MermaidDiagramViewport svgMarkup={svgMarkup} />}
       </DialogContent>
     </Dialog>
   )
@@ -105,7 +126,7 @@ function readSvgNaturalSize(svg: SVGSVGElement): DiagramSize {
   return { width: rect.width, height: rect.height }
 }
 
-function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramLightboxProps): React.JSX.Element {
+function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramViewportProps): React.JSX.Element {
   const viewportRef = useRef<HTMLDivElement>(null)
   const diagramRef = useRef<HTMLDivElement>(null)
   const naturalSizeRef = useRef<DiagramSize>({ width: 0, height: 0 })
@@ -132,7 +153,8 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramLightboxProps): Rea
     if (!host) {
       return
     }
-    // Why: markup was sanitized by MermaidBlock before it reached this component.
+    // Why: markup is serialized from MermaidBlock's DOMPurify-sanitized inline diagram and
+    // re-parsed in the same context (div innerHTML), so it needs no second pass.
     host.innerHTML = svgMarkup
     const svg = host.querySelector('svg')
     if (svg) {

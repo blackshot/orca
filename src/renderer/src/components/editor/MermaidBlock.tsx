@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type mermaidNamespace from 'mermaid'
 import DOMPurify from 'dompurify'
 import { getMermaidConfig } from './mermaid-config'
@@ -54,13 +54,21 @@ export default function MermaidBlock({
   htmlLabels = false
 }: MermaidBlockProps): React.JSX.Element {
   const id = useId().replace(/:/g, '_')
+  const renderId = `mermaid-${id}`
   const containerRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
-  const [expandedSvg, setExpandedSvg] = useState<{ renderKey: string; markup: string } | null>(null)
+  const [renderedKey, setRenderedKey] = useState<string | null>(null)
   const renderKey = `${isDark}|${htmlLabels}|${content}`
-  // Why: while a new render waits in the queue, the stored copy still shows the
+  // Why: while a new render waits in the queue, the inline SVG still shows the
   // previous diagram; hide the expand control instead of opening stale output.
-  const expandedSvgMarkup = expandedSvg?.renderKey === renderKey ? expandedSvg.markup : null
+  const isRenderCurrent = renderedKey === renderKey
+
+  const getExpandedSvgMarkup = useCallback((): string | null => {
+    const markup = containerRef.current?.innerHTML
+    // Why: the expanded copy lives in the same document; its scoped <style>
+    // and marker url(#…) refs must not collide with the inline diagram's IDs.
+    return markup ? markup.replaceAll(renderId, `${renderId}-expanded`) : null
+  }, [renderId])
 
   useEffect(() => {
     let cancelled = false
@@ -77,30 +85,23 @@ export default function MermaidBlock({
         // and render(), which would make markdown preview fall back to the
         // broken foreignObject label path again.
         mermaid.initialize(getMermaidConfig(isDark, htmlLabels))
-        const renderId = `mermaid-${id}`
         const { svg } = await mermaid.render(renderId, content)
         if (!cancelled && containerRef.current) {
           // Why: although mermaid uses DOMPurify internally, we add an explicit
           // sanitization pass as defense-in-depth against XSS in case upstream
           // behaviour changes or a mermaid version ships without sanitization.
-          const sanitizedSvg = DOMPurify.sanitize(svg, {
+          containerRef.current.innerHTML = DOMPurify.sanitize(svg, {
             USE_PROFILES: { svg: true }
           })
-          containerRef.current.innerHTML = sanitizedSvg
-          // Why: the expanded copy lives in the same document; its scoped <style>
-          // and marker url(#…) refs must not collide with the inline diagram's IDs.
-          setExpandedSvg({
-            renderKey,
-            markup: sanitizedSvg.replaceAll(renderId, `${renderId}-expanded`)
-          })
+          setRenderedKey(renderKey)
           setError(null)
         }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Invalid mermaid syntax')
-          setExpandedSvg(null)
+          setRenderedKey(null)
           // Mermaid leaves an error element in the DOM on failure — clean it up.
-          const errorEl = document.getElementById(`d${`mermaid-${id}`}`)
+          const errorEl = document.getElementById(`d${renderId}`)
           errorEl?.remove()
         }
       }
@@ -112,7 +113,7 @@ export default function MermaidBlock({
     return () => {
       cancelled = true
     }
-  }, [content, htmlLabels, isDark, id, renderKey])
+  }, [content, htmlLabels, isDark, renderId, renderKey])
 
   if (error) {
     return (
@@ -130,7 +131,7 @@ export default function MermaidBlock({
   return (
     <div className="mermaid-block group/mermaid relative">
       <div ref={containerRef} />
-      {expandedSvgMarkup && <MermaidDiagramLightbox svgMarkup={expandedSvgMarkup} />}
+      {isRenderCurrent && <MermaidDiagramLightbox getSvgMarkup={getExpandedSvgMarkup} />}
     </div>
   )
 }
