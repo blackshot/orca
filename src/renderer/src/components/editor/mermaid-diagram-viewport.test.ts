@@ -84,4 +84,9 @@ describe('wheelZoomFactor', () => {
   it('treats line-mode deltas as larger pixel deltas', () => {
     expect(wheelZoomFactor(3, 1)).toBeCloseTo(wheelZoomFactor(48, 0))
   })
+
+  it('treats page-mode deltas as a full page of pixels', () => {
+    expect(wheelZoomFactor(1, 2)).toBeCloseTo(wheelZoomFactor(800, 0))
+    expect(wheelZoomFactor(1, 2)).toBeLessThan(0.5)
+  })
 })

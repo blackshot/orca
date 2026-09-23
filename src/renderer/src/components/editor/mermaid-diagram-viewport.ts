@@ -10,6 +10,7 @@ const MAX_FIT_SCALE = 2
 const FIT_PADDING = 32
 const WHEEL_ZOOM_SENSITIVITY = 0.0015
 const WHEEL_LINE_HEIGHT_PX = 16
+const WHEEL_PAGE_HEIGHT_PX = 800
 
 export function clampDiagramScale(scale: number, minScale = MIN_DIAGRAM_SCALE): number {
   return Math.min(MAX_DIAGRAM_SCALE, Math.max(minScale, scale))
@@ -58,7 +59,16 @@ export function zoomDiagramAt(
 
 /** Multiplicative zoom factor for a wheel event; exponential so trackpads and wheels feel alike. */
 export function wheelZoomFactor(deltaY: number, deltaMode: number): number {
-  // Why: deltaMode 1 reports lines (Firefox-style mouse wheels), not pixels.
-  const pixels = deltaMode === 1 ? deltaY * WHEEL_LINE_HEIGHT_PX : deltaY
-  return Math.exp(-pixels * WHEEL_ZOOM_SENSITIVITY)
+  return Math.exp(-wheelDeltaPixels(deltaY, deltaMode) * WHEEL_ZOOM_SENSITIVITY)
+}
+
+// Why: deltaMode 1 reports lines (Firefox-style mouse wheels) and 2 reports pages, not pixels.
+function wheelDeltaPixels(deltaY: number, deltaMode: number): number {
+  if (deltaMode === 1) {
+    return deltaY * WHEEL_LINE_HEIGHT_PX
+  }
+  if (deltaMode === 2) {
+    return deltaY * WHEEL_PAGE_HEIGHT_PX
+  }
+  return deltaY
 }

@@ -131,6 +131,9 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramViewportProps): Rea
   const diagramRef = useRef<HTMLDivElement>(null)
   const naturalSizeRef = useRef<DiagramSize>({ width: 0, height: 0 })
   const minScaleRef = useRef(MIN_DIAGRAM_SCALE)
+  // Why: auto-refit on resize only while the view is still the fitted one, so a
+  // window resize never throws away the zoom/pan the user chose.
+  const userAdjustedRef = useRef(false)
   const dragRef = useRef<DragState | null>(null)
   const [transform, setTransform] = useState<DiagramTransform | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -145,6 +148,7 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramViewportProps): Rea
       height: viewport.clientHeight
     })
     minScaleRef.current = diagramMinScale(fitted.scale)
+    userAdjustedRef.current = false
     setTransform(fitted)
   }, [])
 
@@ -174,12 +178,27 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramViewportProps): Rea
     if (!viewport) {
       return
     }
+    const observer = new ResizeObserver(() => {
+      if (!userAdjustedRef.current) {
+        fitToViewport()
+      }
+    })
+    observer.observe(viewport)
+    return () => observer.disconnect()
+  }, [fitToViewport])
+
+  useEffect(() => {
+    const viewport = viewportRef.current
+    if (!viewport) {
+      return
+    }
     // Why: React's onWheel is passive, so it cannot stop page/app zoom or scrolling.
     const onWheel = (event: WheelEvent): void => {
       event.preventDefault()
       const rect = viewport.getBoundingClientRect()
       const anchor = { x: event.clientX - rect.left, y: event.clientY - rect.top }
       const factor = wheelZoomFactor(event.deltaY, event.deltaMode)
+      userAdjustedRef.current = true
       setTransform(
         (current) =>
           current && zoomDiagramAt(current, current.scale * factor, anchor, minScaleRef.current)
@@ -195,6 +214,7 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramViewportProps): Rea
       return
     }
     const anchor = { x: viewport.clientWidth / 2, y: viewport.clientHeight / 2 }
+    userAdjustedRef.current = true
     setTransform(
       (current) =>
         current && zoomDiagramAt(current, current.scale * factor, anchor, minScaleRef.current)
@@ -239,6 +259,7 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramViewportProps): Rea
             if (!drag || drag.pointerId !== event.pointerId) {
               return
             }
+            userAdjustedRef.current = true
             setTransform(
               (current) =>
                 current && {
