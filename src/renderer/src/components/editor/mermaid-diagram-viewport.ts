@@ -11,8 +11,13 @@ const FIT_PADDING = 32
 const WHEEL_ZOOM_SENSITIVITY = 0.0015
 const WHEEL_LINE_HEIGHT_PX = 16
 
-export function clampDiagramScale(scale: number): number {
-  return Math.min(MAX_DIAGRAM_SCALE, Math.max(MIN_DIAGRAM_SCALE, scale))
+export function clampDiagramScale(scale: number, minScale = MIN_DIAGRAM_SCALE): number {
+  return Math.min(MAX_DIAGRAM_SCALE, Math.max(minScale, scale))
+}
+
+/** Lowest allowed zoom for a diagram; drops below the default so huge diagrams still fit whole. */
+export function diagramMinScale(fitScale: number): number {
+  return Math.min(MIN_DIAGRAM_SCALE, fitScale)
 }
 
 /** Centers the diagram in the viewport at the largest scale that fits it whole. */
@@ -22,8 +27,11 @@ export function fitDiagramTransform(content: DiagramSize, viewport: DiagramSize)
   }
   const availableWidth = Math.max(1, viewport.width - FIT_PADDING * 2)
   const availableHeight = Math.max(1, viewport.height - FIT_PADDING * 2)
-  const scale = clampDiagramScale(
-    Math.min(availableWidth / content.width, availableHeight / content.height, MAX_FIT_SCALE)
+  // Why: no lower clamp — a very large diagram may need less than MIN_DIAGRAM_SCALE to fit whole.
+  const scale = Math.min(
+    availableWidth / content.width,
+    availableHeight / content.height,
+    MAX_FIT_SCALE
   )
   return {
     x: (viewport.width - content.width * scale) / 2,
@@ -36,9 +44,10 @@ export function fitDiagramTransform(content: DiagramSize, viewport: DiagramSize)
 export function zoomDiagramAt(
   transform: DiagramTransform,
   nextScale: number,
-  anchor: DiagramPoint
+  anchor: DiagramPoint,
+  minScale = MIN_DIAGRAM_SCALE
 ): DiagramTransform {
-  const scale = clampDiagramScale(nextScale)
+  const scale = clampDiagramScale(nextScale, minScale)
   const ratio = scale / transform.scale
   return {
     x: anchor.x - (anchor.x - transform.x) * ratio,

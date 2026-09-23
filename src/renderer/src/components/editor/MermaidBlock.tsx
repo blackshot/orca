@@ -56,7 +56,11 @@ export default function MermaidBlock({
   const id = useId().replace(/:/g, '_')
   const containerRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
-  const [expandedSvgMarkup, setExpandedSvgMarkup] = useState<string | null>(null)
+  const [expandedSvg, setExpandedSvg] = useState<{ renderKey: string; markup: string } | null>(null)
+  const renderKey = `${isDark}|${htmlLabels}|${content}`
+  // Why: while a new render waits in the queue, the stored copy still shows the
+  // previous diagram; hide the expand control instead of opening stale output.
+  const expandedSvgMarkup = expandedSvg?.renderKey === renderKey ? expandedSvg.markup : null
 
   useEffect(() => {
     let cancelled = false
@@ -85,13 +89,16 @@ export default function MermaidBlock({
           containerRef.current.innerHTML = sanitizedSvg
           // Why: the expanded copy lives in the same document; its scoped <style>
           // and marker url(#…) refs must not collide with the inline diagram's IDs.
-          setExpandedSvgMarkup(sanitizedSvg.replaceAll(renderId, `${renderId}-expanded`))
+          setExpandedSvg({
+            renderKey,
+            markup: sanitizedSvg.replaceAll(renderId, `${renderId}-expanded`)
+          })
           setError(null)
         }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Invalid mermaid syntax')
-          setExpandedSvgMarkup(null)
+          setExpandedSvg(null)
           // Mermaid leaves an error element in the DOM on failure — clean it up.
           const errorEl = document.getElementById(`d${`mermaid-${id}`}`)
           errorEl?.remove()
@@ -105,7 +112,7 @@ export default function MermaidBlock({
     return () => {
       cancelled = true
     }
-  }, [content, htmlLabels, isDark, id])
+  }, [content, htmlLabels, isDark, id, renderKey])
 
   if (error) {
     return (

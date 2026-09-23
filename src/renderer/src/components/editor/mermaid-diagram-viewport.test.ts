@@ -3,6 +3,7 @@ import {
   MAX_DIAGRAM_SCALE,
   MIN_DIAGRAM_SCALE,
   clampDiagramScale,
+  diagramMinScale,
   fitDiagramTransform,
   wheelZoomFactor,
   zoomDiagramAt
@@ -20,6 +21,13 @@ describe('fitDiagramTransform', () => {
     const t = fitDiagramTransform({ width: 100, height: 50 }, { width: 2000, height: 1000 })
     expect(t.scale).toBe(2)
     expect(t.x).toBe((2000 - 200) / 2)
+  })
+
+  it('fits diagrams that need less than the default minimum scale', () => {
+    const t = fitDiagramTransform({ width: 20000, height: 1000 }, { width: 1064, height: 800 })
+    expect(t.scale).toBeCloseTo(1000 / 20000)
+    expect(t.scale).toBeLessThan(MIN_DIAGRAM_SCALE)
+    expect(t.x + 20000 * t.scale).toBeCloseTo(1064 - 32)
   })
 
   it('falls back to identity when sizes are unknown', () => {
@@ -49,6 +57,20 @@ describe('zoomDiagramAt', () => {
     const start = { x: 0, y: 0, scale: MAX_DIAGRAM_SCALE }
     expect(zoomDiagramAt(start, 100, { x: 300, y: 300 })).toEqual(start)
     expect(clampDiagramScale(0.001)).toBe(MIN_DIAGRAM_SCALE)
+  })
+})
+
+describe('diagramMinScale', () => {
+  it('lets zoom-out reach the fit scale of a huge diagram without going lower', () => {
+    const fitScale = 0.05
+    const minScale = diagramMinScale(fitScale)
+    expect(minScale).toBe(fitScale)
+    const zoomedOut = zoomDiagramAt({ x: 0, y: 0, scale: 0.2 }, 0.001, { x: 0, y: 0 }, minScale)
+    expect(zoomedOut.scale).toBe(fitScale)
+  })
+
+  it('keeps the default floor for diagrams that fit above it', () => {
+    expect(diagramMinScale(0.6)).toBe(MIN_DIAGRAM_SCALE)
   })
 })
 

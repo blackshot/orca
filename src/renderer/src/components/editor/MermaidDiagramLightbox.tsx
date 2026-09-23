@@ -13,6 +13,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { translate } from '@/i18n/i18n'
 import {
   DIAGRAM_BUTTON_ZOOM_STEP,
+  MIN_DIAGRAM_SCALE,
+  diagramMinScale,
   fitDiagramTransform,
   wheelZoomFactor,
   zoomDiagramAt,
@@ -107,6 +109,7 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramLightboxProps): Rea
   const viewportRef = useRef<HTMLDivElement>(null)
   const diagramRef = useRef<HTMLDivElement>(null)
   const naturalSizeRef = useRef<DiagramSize>({ width: 0, height: 0 })
+  const minScaleRef = useRef(MIN_DIAGRAM_SCALE)
   const dragRef = useRef<DragState | null>(null)
   const [transform, setTransform] = useState<DiagramTransform | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -116,12 +119,12 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramLightboxProps): Rea
     if (!viewport) {
       return
     }
-    setTransform(
-      fitDiagramTransform(naturalSizeRef.current, {
-        width: viewport.clientWidth,
-        height: viewport.clientHeight
-      })
-    )
+    const fitted = fitDiagramTransform(naturalSizeRef.current, {
+      width: viewport.clientWidth,
+      height: viewport.clientHeight
+    })
+    minScaleRef.current = diagramMinScale(fitted.scale)
+    setTransform(fitted)
   }, [])
 
   useLayoutEffect(() => {
@@ -155,7 +158,10 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramLightboxProps): Rea
       const rect = viewport.getBoundingClientRect()
       const anchor = { x: event.clientX - rect.left, y: event.clientY - rect.top }
       const factor = wheelZoomFactor(event.deltaY, event.deltaMode)
-      setTransform((current) => current && zoomDiagramAt(current, current.scale * factor, anchor))
+      setTransform(
+        (current) =>
+          current && zoomDiagramAt(current, current.scale * factor, anchor, minScaleRef.current)
+      )
     }
     viewport.addEventListener('wheel', onWheel, { passive: false })
     return () => viewport.removeEventListener('wheel', onWheel)
@@ -167,7 +173,10 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramLightboxProps): Rea
       return
     }
     const anchor = { x: viewport.clientWidth / 2, y: viewport.clientHeight / 2 }
-    setTransform((current) => current && zoomDiagramAt(current, current.scale * factor, anchor))
+    setTransform(
+      (current) =>
+        current && zoomDiagramAt(current, current.scale * factor, anchor, minScaleRef.current)
+    )
   }
 
   const endDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
