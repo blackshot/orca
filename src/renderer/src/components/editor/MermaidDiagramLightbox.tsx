@@ -10,10 +10,12 @@ import {
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { ShortcutKeyCombo } from '@/components/ShortcutKeyCombo'
 import { translate } from '@/i18n/i18n'
 import {
   DIAGRAM_BUTTON_ZOOM_STEP,
   MIN_DIAGRAM_SCALE,
+  diagramKeyAction,
   diagramMinScale,
   fitDiagramTransform,
   isSameDiagramTransform,
@@ -100,9 +102,16 @@ export default function MermaidDiagramLightbox({
         variant="fullscreen"
         onOpenAutoFocus={(event) => {
           // Why: default focus lands on the first toolbar button and opens its tooltip,
-          // so the first Escape only dismisses the tooltip. Focus the dialog itself instead.
+          // so the first Escape only dismisses the tooltip. Focus the diagram viewport
+          // instead, which also makes arrow-key pan and +/- zoom work right away.
           event.preventDefault()
-          if (event.currentTarget instanceof HTMLElement) {
+          if (!(event.currentTarget instanceof HTMLElement)) {
+            return
+          }
+          const viewport = event.currentTarget.querySelector('[data-mermaid-diagram-viewport]')
+          if (viewport instanceof HTMLElement) {
+            viewport.focus()
+          } else {
             event.currentTarget.focus()
           }
         }}
@@ -241,6 +250,30 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramViewportProps): Rea
     )
   }
 
+  const onViewportKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+    // Why: leave modified keys (e.g. Ctrl+= app zoom) to the app.
+    if (event.ctrlKey || event.metaKey || event.altKey) {
+      return
+    }
+    const action = diagramKeyAction(event.key, event.shiftKey)
+    if (!action) {
+      return
+    }
+    event.preventDefault()
+    event.stopPropagation()
+    if (action.kind === 'fit') {
+      fitToViewport()
+    } else if (action.kind === 'zoom') {
+      zoomAroundCenter(action.factor)
+    } else {
+      applyUserTransform((current) => ({
+        ...current,
+        x: current.x + action.dx,
+        y: current.y + action.dy
+      }))
+    }
+  }
+
   const endDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
     if (dragRef.current?.pointerId !== event.pointerId) {
       return
@@ -258,8 +291,16 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramViewportProps): Rea
       <div className="relative min-h-0 flex-1">
         <div
           ref={viewportRef}
+          data-mermaid-diagram-viewport=""
           data-dragging={dragging}
-          className="absolute inset-0 cursor-grab touch-none overflow-hidden bg-background select-none data-[dragging=true]:cursor-grabbing"
+          role="application"
+          tabIndex={0}
+          aria-label={translate(
+            'auto.components.editor.MermaidDiagramLightbox.viewportLabel',
+            'Diagram. Arrow keys pan, plus and minus zoom, 0 fits to screen.'
+          )}
+          className="absolute inset-0 cursor-grab touch-none overflow-hidden bg-background outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset data-[dragging=true]:cursor-grabbing"
+          onKeyDown={onViewportKeyDown}
           onPointerDown={(event) => {
             const current = transformRef.current
             if (event.button !== 0 || !current) {
@@ -307,12 +348,13 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramViewportProps): Rea
           <span className="hidden px-2 text-xs text-muted-foreground md:inline">
             {translate(
               'auto.components.editor.MermaidDiagramLightbox.hint',
-              'Scroll to zoom · Drag to pan'
+              'Scroll or +/− to zoom · Drag or arrow keys to pan'
             )}
           </span>
           <Separator orientation="vertical" className="mx-1 hidden h-4 md:block" />
           <ToolbarIconButton
             label={translate('auto.components.editor.MermaidDiagramLightbox.zoomOut', 'Zoom out')}
+            shortcut="-"
             onClick={() => zoomAroundCenter(1 / DIAGRAM_BUTTON_ZOOM_STEP)}
           >
             <ZoomOut />
@@ -322,12 +364,14 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramViewportProps): Rea
           </span>
           <ToolbarIconButton
             label={translate('auto.components.editor.MermaidDiagramLightbox.zoomIn', 'Zoom in')}
+            shortcut="+"
             onClick={() => zoomAroundCenter(DIAGRAM_BUTTON_ZOOM_STEP)}
           >
             <ZoomIn />
           </ToolbarIconButton>
           <ToolbarIconButton
             label={translate('auto.components.editor.MermaidDiagramLightbox.fit', 'Fit to screen')}
+            shortcut="0"
             onClick={fitToViewport}
           >
             <Maximize />
@@ -346,10 +390,14 @@ function MermaidDiagramViewport({ svgMarkup }: MermaidDiagramViewportProps): Rea
   )
 }
 
-type ToolbarIconButtonProps = React.ComponentProps<typeof Button> & { label: string }
+type ToolbarIconButtonProps = React.ComponentProps<typeof Button> & {
+  label: string
+  shortcut?: string
+}
 
 function ToolbarIconButton({
   label,
+  shortcut,
   children,
   ...props
 }: ToolbarIconButtonProps): React.JSX.Element {
@@ -362,6 +410,7 @@ function ToolbarIconButton({
       </TooltipTrigger>
       <TooltipContent side="top" sideOffset={4}>
         {label}
+        {shortcut && <ShortcutKeyCombo keys={[shortcut]} className="ml-1.5" />}
       </TooltipContent>
     </Tooltip>
   )

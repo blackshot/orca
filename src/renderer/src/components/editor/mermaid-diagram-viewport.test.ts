@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  DIAGRAM_BUTTON_ZOOM_STEP,
+  DIAGRAM_KEY_PAN_STEP,
   MAX_DIAGRAM_SCALE,
   MIN_DIAGRAM_SCALE,
   clampDiagramScale,
+  diagramKeyAction,
   diagramMinScale,
   fitDiagramTransform,
   isSameDiagramTransform,
@@ -107,5 +110,42 @@ describe('wheelZoomFactor', () => {
   it('treats page-mode deltas as a full page of pixels', () => {
     expect(wheelZoomFactor(1, 2)).toBeCloseTo(wheelZoomFactor(800, 0))
     expect(wheelZoomFactor(1, 2)).toBeLessThan(0.5)
+  })
+})
+
+describe('diagramKeyAction', () => {
+  it('pans like scrolling: ArrowRight reveals content to the right', () => {
+    expect(diagramKeyAction('ArrowRight', false)).toEqual({
+      kind: 'pan',
+      dx: -DIAGRAM_KEY_PAN_STEP,
+      dy: 0
+    })
+    expect(diagramKeyAction('ArrowUp', false)).toEqual({
+      kind: 'pan',
+      dx: 0,
+      dy: DIAGRAM_KEY_PAN_STEP
+    })
+  })
+
+  it('pans in bigger steps with Shift', () => {
+    const slow = diagramKeyAction('ArrowDown', false)
+    const fast = diagramKeyAction('ArrowDown', true)
+    expect(slow?.kind === 'pan' && fast?.kind === 'pan' && fast.dy / slow.dy).toBe(4)
+  })
+
+  it('zooms with + / = and -, and fits with 0', () => {
+    expect(diagramKeyAction('+', true)).toEqual({ kind: 'zoom', factor: DIAGRAM_BUTTON_ZOOM_STEP })
+    expect(diagramKeyAction('=', false)).toEqual({ kind: 'zoom', factor: DIAGRAM_BUTTON_ZOOM_STEP })
+    expect(diagramKeyAction('-', false)).toEqual({
+      kind: 'zoom',
+      factor: 1 / DIAGRAM_BUTTON_ZOOM_STEP
+    })
+    expect(diagramKeyAction('0', false)).toEqual({ kind: 'fit' })
+  })
+
+  it('ignores unrelated keys so Escape and Tab keep their dialog behavior', () => {
+    expect(diagramKeyAction('Escape', false)).toBeNull()
+    expect(diagramKeyAction('Tab', false)).toBeNull()
+    expect(diagramKeyAction('a', false)).toBeNull()
   })
 })

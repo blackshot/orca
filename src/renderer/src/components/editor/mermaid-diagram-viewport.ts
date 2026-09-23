@@ -5,6 +5,8 @@ export type DiagramPoint = { x: number; y: number }
 export const MIN_DIAGRAM_SCALE = 0.1
 export const MAX_DIAGRAM_SCALE = 8
 export const DIAGRAM_BUTTON_ZOOM_STEP = 1.25
+export const DIAGRAM_KEY_PAN_STEP = 80
+const DIAGRAM_KEY_PAN_FAST_MULTIPLIER = 4
 // Why: small diagrams would otherwise balloon to fill the whole screen on open.
 const MAX_FIT_SCALE = 2
 const FIT_PADDING = 32
@@ -75,4 +77,35 @@ function wheelDeltaPixels(deltaY: number, deltaMode: number): number {
     return deltaY * WHEEL_PAGE_HEIGHT_PX
   }
   return deltaY
+}
+
+export type DiagramKeyAction =
+  | { kind: 'pan'; dx: number; dy: number }
+  | { kind: 'zoom'; factor: number }
+  | { kind: 'fit' }
+
+/** Maps a viewer keypress to a view change; arrows move the view like scrolling (Shift = bigger steps). */
+export function diagramKeyAction(key: string, shiftKey: boolean): DiagramKeyAction | null {
+  const step = DIAGRAM_KEY_PAN_STEP * (shiftKey ? DIAGRAM_KEY_PAN_FAST_MULTIPLIER : 1)
+  switch (key) {
+    case 'ArrowLeft':
+      return { kind: 'pan', dx: step, dy: 0 }
+    case 'ArrowRight':
+      return { kind: 'pan', dx: -step, dy: 0 }
+    case 'ArrowUp':
+      return { kind: 'pan', dx: 0, dy: step }
+    case 'ArrowDown':
+      return { kind: 'pan', dx: 0, dy: -step }
+    // Why: '=' shares the '+' key on US layouts, so it zooms in without Shift.
+    case '+':
+    case '=':
+      return { kind: 'zoom', factor: DIAGRAM_BUTTON_ZOOM_STEP }
+    case '-':
+    case '_':
+      return { kind: 'zoom', factor: 1 / DIAGRAM_BUTTON_ZOOM_STEP }
+    case '0':
+      return { kind: 'fit' }
+    default:
+      return null
+  }
 }
